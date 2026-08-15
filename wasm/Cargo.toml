@@ -1,0 +1,21 @@
+[package]
+name = "cuescript-wasm"
+version = "0.1.0"
+edition = "2021"
+description = "browser bindings for cuescript — the panel runs the same compiler and renderer as the proxy"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+cuescript = { path = ".." }
+wasm-bindgen = "0.2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+# the panel ships this over the wire; size matters more than the last few
+# percent of speed for a preview that runs on keystroke pauses
+opt-level = "s"
+lto = true
