@@ -30,7 +30,16 @@ pub struct Token {
 fn is_step_keyword(w: &str) -> bool {
     matches!(
         w,
-        "release" | "open" | "stay" | "say" | "kick" | "let" | "require" | "lookup" | "call" | "remember"
+        "release"
+            | "open"
+            | "stay"
+            | "say"
+            | "kick"
+            | "let"
+            | "require"
+            | "lookup"
+            | "call"
+            | "remember"
     )
 }
 
@@ -44,7 +53,10 @@ pub fn lex(src: &str) -> Result<Vec<Token>, CueError> {
 
     macro_rules! push {
         ($t:expr, $l:expr, $c:expr) => {
-            out.push(Token { tok: $t, span: Span { line: $l, col: $c } })
+            out.push(Token {
+                tok: $t,
+                span: Span { line: $l, col: $c },
+            })
         };
     }
 
@@ -67,7 +79,11 @@ pub fn lex(src: &str) -> Result<Vec<Token>, CueError> {
 
         // comment — but `#` also starts a hex colour (`color=#58C7F3`), so it
         // only opens a comment when followed by whitespace or another `#`
-        if c == '#' && bytes.get(i + 1).is_none_or(|n| n.is_whitespace() || *n == '#') {
+        if c == '#'
+            && bytes
+                .get(i + 1)
+                .is_none_or(|n| n.is_whitespace() || *n == '#')
+        {
             while i < bytes.len() && bytes[i] != '\n' {
                 i += 1;
             }
@@ -111,7 +127,10 @@ pub fn lex(src: &str) -> Result<Vec<Token>, CueError> {
                 i += 1;
             }
             if !closed {
-                return Err(CueError::syntax(Span { line: sl, col: sc }, "unterminated string"));
+                return Err(CueError::syntax(
+                    Span { line: sl, col: sc },
+                    "unterminated string",
+                ));
             }
             push!(Tok::Str(s), sl, sc);
             continue;
@@ -199,7 +218,14 @@ pub fn lex(src: &str) -> Result<Vec<Token>, CueError> {
             let mut w = String::new();
             while i < bytes.len() {
                 let ch = bytes[i];
-                if ch.is_alphanumeric() || ch == '_' || ch == '.' || ch == '#' || ch == ':' || ch == '/' || ch == '-' {
+                if ch.is_alphanumeric()
+                    || ch == '_'
+                    || ch == '.'
+                    || ch == '#'
+                    || ch == ':'
+                    || ch == '/'
+                    || ch == '-'
+                {
                     // `->` must not be swallowed into a word
                     if ch == '-' && i + 1 < bytes.len() && bytes[i + 1] == '>' {
                         break;
@@ -245,7 +271,9 @@ mod tests {
     #[test]
     fn distinguishes_interpolation_from_block() {
         let toks = lex("input username fill={player.name}\nbutton \"Go\" { open x }").unwrap();
-        assert!(toks.iter().any(|t| t.tok == Tok::Expr("player.name".into())));
+        assert!(toks
+            .iter()
+            .any(|t| t.tok == Tok::Expr("player.name".into())));
         assert!(toks.iter().any(|t| t.tok == Tok::LBrace));
     }
 

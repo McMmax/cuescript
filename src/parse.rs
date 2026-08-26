@@ -49,7 +49,10 @@ impl Parser {
         let span = self.span();
         match self.bump().map(|t| t.tok) {
             Some(Tok::Word(w)) => Ok(w),
-            other => Err(CueError::syntax(span, format!("expected a name, found {}", describe(&other)))),
+            other => Err(CueError::syntax(
+                span,
+                format!("expected a name, found {}", describe(&other)),
+            )),
         }
     }
 
@@ -59,7 +62,10 @@ impl Parser {
             Ok(())
         } else {
             let found = self.peek().cloned();
-            Err(CueError::syntax(span, format!("expected `{w}`, found {}", describe(&found))))
+            Err(CueError::syntax(
+                span,
+                format!("expected `{w}`, found {}", describe(&found)),
+            ))
         }
     }
 
@@ -72,7 +78,11 @@ impl Parser {
             let found = self.peek().cloned();
             Err(CueError::syntax(
                 span,
-                format!("expected {}, found {}", describe(&Some(t)), describe(&found)),
+                format!(
+                    "expected {}, found {}",
+                    describe(&Some(t)),
+                    describe(&found)
+                ),
             ))
         }
     }
@@ -83,7 +93,10 @@ impl Parser {
         match self.bump().map(|t| t.tok) {
             Some(Tok::Str(s)) => Ok(s),
             Some(Tok::Expr(e)) => Ok(format!("{{{e}}}")),
-            other => Err(CueError::syntax(span, format!("expected text, found {}", describe(&other)))),
+            other => Err(CueError::syntax(
+                span,
+                format!("expected text, found {}", describe(&other)),
+            )),
         }
     }
 
@@ -99,7 +112,10 @@ impl Parser {
             Some(Tok::Expr(e)) => Ok(format!("{{{e}}}")),
             Some(Tok::Num(n)) => Ok(n.to_string()),
             Some(Tok::Word(w)) => Ok(format!("{{{w}}}")),
-            other => Err(CueError::syntax(span, format!("expected a value, found {}", describe(&other)))),
+            other => Err(CueError::syntax(
+                span,
+                format!("expected a value, found {}", describe(&other)),
+            )),
         }
     }
 
@@ -110,7 +126,10 @@ impl Parser {
             Some(Tok::Str(s)) => Ok(s),
             Some(Tok::Num(n)) => Ok(n.to_string()),
             Some(Tok::Word(w)) => Ok(w),
-            other => Err(CueError::syntax(span, format!("expected a value, found {}", describe(&other)))),
+            other => Err(CueError::syntax(
+                span,
+                format!("expected a value, found {}", describe(&other)),
+            )),
         }
     }
 
@@ -166,7 +185,11 @@ impl Parser {
                 self.expect(Tok::LBrace)?;
                 let items = self.items()?;
                 self.expect(Tok::RBrace)?;
-                screens.push(Screen { name: sname, items, span: s });
+                screens.push(Screen {
+                    name: sname,
+                    items,
+                    span: s,
+                });
             } else {
                 let found = self.peek().cloned();
                 return Err(CueError::syntax(
@@ -178,7 +201,13 @@ impl Parser {
         self.expect(Tok::RBrace)?;
 
         let entry = entry.ok_or_else(|| CueError::syntax(span, "flow has no `entry` screen"))?;
-        Ok(Flow { name, entry, entry_span, screens, span })
+        Ok(Flow {
+            name,
+            entry,
+            entry_span,
+            screens,
+            span,
+        })
     }
 
     fn items(&mut self) -> Result<Vec<Item>, CueError> {
@@ -191,14 +220,23 @@ impl Parser {
             }
 
             if self.eat_word("include") {
-                items.push(Item::Include { name: self.expect_word()?, span });
+                items.push(Item::Include {
+                    name: self.expect_word()?,
+                    span,
+                });
                 continue;
             }
 
             if let Some(kind) = self.line_kind() {
                 let text = self.expect_text()?;
                 let (color, bold) = self.line_attrs()?;
-                items.push(Item::Line { kind, text, color, bold, span });
+                items.push(Item::Line {
+                    kind,
+                    text,
+                    color,
+                    bold,
+                    span,
+                });
                 continue;
             }
 
@@ -206,7 +244,11 @@ impl Parser {
                 let current = self.expect_num()?;
                 self.expect_keyword("of")?;
                 let total = self.expect_num()?;
-                items.push(Item::Step { current, total, span });
+                items.push(Item::Step {
+                    current,
+                    total,
+                    span,
+                });
                 continue;
             }
 
@@ -224,7 +266,12 @@ impl Parser {
                         break;
                     }
                 }
-                items.push(Item::Input { key, secret, fill, span });
+                items.push(Item::Input {
+                    key,
+                    secret,
+                    fill,
+                    span,
+                });
                 continue;
             }
 
@@ -241,7 +288,12 @@ impl Parser {
                 self.expect(Tok::LBrace)?;
                 let steps = self.stmts()?;
                 self.expect(Tok::RBrace)?;
-                items.push(Item::Button { label, style, steps, span });
+                items.push(Item::Button {
+                    label,
+                    style,
+                    steps,
+                    span,
+                });
                 continue;
             }
 
@@ -289,7 +341,10 @@ impl Parser {
         let span = self.span();
         match self.bump().map(|t| t.tok) {
             Some(Tok::Num(n)) => Ok(n),
-            other => Err(CueError::syntax(span, format!("expected a number, found {}", describe(&other)))),
+            other => Err(CueError::syntax(
+                span,
+                format!("expected a number, found {}", describe(&other)),
+            )),
         }
     }
 
@@ -326,7 +381,11 @@ impl Parser {
             let cond = self.cond()?;
             self.expect_keyword("else")?;
             let message = self.expect_text()?;
-            return Ok(Stmt::Require { cond, message, span });
+            return Ok(Stmt::Require {
+                cond,
+                message,
+                span,
+            });
         }
 
         if self.eat_word("lookup") {
@@ -337,7 +396,13 @@ impl Parser {
             let value = self.expect_value()?;
             self.expect(Tok::Arrow)?;
             let bind = self.expect_word()?;
-            return Ok(Stmt::Lookup { table, field, value, bind, span });
+            return Ok(Stmt::Lookup {
+                table,
+                field,
+                value,
+                bind,
+                span,
+            });
         }
 
         if self.eat_word("call") {
@@ -373,29 +438,53 @@ impl Parser {
                 } else {
                     vec![self.stmt()?]
                 };
-                handlers.push(Handler { code, actions, span: hspan });
+                handlers.push(Handler {
+                    code,
+                    actions,
+                    span: hspan,
+                });
             }
-            return Ok(Stmt::Call { effect, args, handlers, span });
+            return Ok(Stmt::Call {
+                effect,
+                args,
+                handlers,
+                span,
+            });
         }
 
         if self.eat_word("open") {
-            return Ok(Stmt::Open { screen: self.expect_word()?, span });
+            return Ok(Stmt::Open {
+                screen: self.expect_word()?,
+                span,
+            });
         }
         if self.eat_word("stay") {
-            return Ok(Stmt::Stay { message: self.expect_text()?, span });
+            return Ok(Stmt::Stay {
+                message: self.expect_text()?,
+                span,
+            });
         }
         if self.eat_word("say") {
-            return Ok(Stmt::Say { message: self.expect_text()?, span });
+            return Ok(Stmt::Say {
+                message: self.expect_text()?,
+                span,
+            });
         }
         if self.eat_word("kick") {
-            return Ok(Stmt::Kick { message: self.expect_text()?, span });
+            return Ok(Stmt::Kick {
+                message: self.expect_text()?,
+                span,
+            });
         }
         if self.eat_word("release") {
             return Ok(Stmt::Release { span });
         }
 
         let found = self.peek().cloned();
-        Err(CueError::syntax(span, format!("unknown step {}", describe(&found))))
+        Err(CueError::syntax(
+            span,
+            format!("unknown step {}", describe(&found)),
+        ))
     }
 
     fn cond(&mut self) -> Result<Cond, CueError> {
@@ -427,13 +516,20 @@ impl Parser {
                 return Ok(Cond::IsEmpty { value, negated });
             }
             let right = self.expect_value()?;
-            return Ok(Cond::Equals { left: value, right, negated });
+            return Ok(Cond::Equals {
+                left: value,
+                right,
+                negated,
+            });
         }
 
         let found = self.peek().cloned();
         Err(CueError::syntax(
             span,
-            format!("expected a condition after the value, found {}", describe(&found)),
+            format!(
+                "expected a condition after the value, found {}",
+                describe(&found)
+            ),
         ))
     }
 }
@@ -492,7 +588,11 @@ flow auth {
     fn parses_steps_in_order() {
         let doc = parse(MINI).unwrap();
         let reg = &doc.flow.screens[1];
-        let Item::Button { steps, .. } = reg.items.iter().find(|i| matches!(i, Item::Button { .. })).unwrap()
+        let Item::Button { steps, .. } = reg
+            .items
+            .iter()
+            .find(|i| matches!(i, Item::Button { .. }))
+            .unwrap()
         else {
             unreachable!()
         };
@@ -515,13 +615,25 @@ flow f { entry s
 "#,
         )
         .unwrap();
-        let Item::Button { steps, .. } = &doc.flow.screens[0].items[0] else { unreachable!() };
-        let Stmt::Call { args, handlers, .. } = &steps[0] else { panic!("expected call, got {:?}", steps[0]) };
+        let Item::Button { steps, .. } = &doc.flow.screens[0].items[0] else {
+            unreachable!()
+        };
+        let Stmt::Call { args, handlers, .. } = &steps[0] else {
+            panic!("expected call, got {:?}", steps[0])
+        };
         assert_eq!(args.len(), 2);
         assert_eq!(handlers.len(), 2);
         assert_eq!(handlers[0].code, "username_taken");
-        assert_eq!(handlers[0].actions.len(), 2, "a braced arm holds several steps");
-        assert_eq!(handlers[1].actions.len(), 1, "an un-braced arm is exactly one step");
+        assert_eq!(
+            handlers[0].actions.len(),
+            2,
+            "a braced arm holds several steps"
+        );
+        assert_eq!(
+            handlers[1].actions.len(),
+            1,
+            "an un-braced arm is exactly one step"
+        );
         assert!(
             matches!(steps.last(), Some(Stmt::Open { .. })),
             "the step after the handlers belongs to the button, not the last arm"
@@ -531,7 +643,8 @@ flow f { entry s
 
     #[test]
     fn reports_the_line_of_a_bad_step() {
-        let err = parse("flow f { entry s\n screen s { button \"x\" {\n   frobnicate\n } } }").unwrap_err();
+        let err = parse("flow f { entry s\n screen s { button \"x\" {\n   frobnicate\n } } }")
+            .unwrap_err();
         assert!(format!("{err}").contains("line 3"), "{err}");
     }
 

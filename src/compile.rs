@@ -22,8 +22,14 @@ pub fn compile(doc: &ast::Document) -> Result<Program, CueError> {
     };
 
     for f in &doc.fragments {
-        if c.fragments.insert(f.name.clone(), f.items.clone()).is_some() {
-            return Err(CueError::resolve(f.span, format!("fragment `{}` defined twice", f.name)));
+        if c.fragments
+            .insert(f.name.clone(), f.items.clone())
+            .is_some()
+        {
+            return Err(CueError::resolve(
+                f.span,
+                format!("fragment `{}` defined twice", f.name),
+            ));
         }
     }
 
@@ -34,24 +40,39 @@ pub fn compile(doc: &ast::Document) -> Result<Program, CueError> {
             return Err(CueError::resolve(s.span, "too many screens"));
         }
         if order.insert(s.name.clone(), i as ScreenId).is_some() {
-            return Err(CueError::resolve(s.span, format!("screen `{}` defined twice", s.name)));
+            return Err(CueError::resolve(
+                s.span,
+                format!("screen `{}` defined twice", s.name),
+            ));
         }
     }
 
-    let entry = *order
-        .get(&doc.flow.entry)
-        .ok_or_else(|| CueError::resolve(doc.flow.entry_span, format!("entry screen `{}` does not exist", doc.flow.entry)))?;
+    let entry = *order.get(&doc.flow.entry).ok_or_else(|| {
+        CueError::resolve(
+            doc.flow.entry_span,
+            format!("entry screen `{}` does not exist", doc.flow.entry),
+        )
+    })?;
 
     let mut screens = Vec::with_capacity(doc.flow.screens.len());
     let mut programs: Vec<Vec<prog::Step>> = Vec::new();
 
     for s in &doc.flow.screens {
-        let mut screen = prog::Screen { name: s.name.clone(), ..Default::default() };
+        let mut screen = prog::Screen {
+            name: s.name.clone(),
+            ..Default::default()
+        };
         let items = c.expand(&s.items, s.span)?;
         for item in &items {
             match item {
                 Item::Include { .. } => unreachable!("expand() inlines includes"),
-                Item::Line { kind, text, color, bold, .. } => screen.lines.push(prog::Line {
+                Item::Line {
+                    kind,
+                    text,
+                    color,
+                    bold,
+                    ..
+                } => screen.lines.push(prog::Line {
                     kind: *kind,
                     text: c.text(text),
                     color: color.clone(),
@@ -63,12 +84,19 @@ pub fn compile(doc: &ast::Document) -> Result<Program, CueError> {
                     color: None,
                     bold: false,
                 }),
-                Item::Input { key, secret, fill, .. } => screen.inputs.push(prog::Input {
+                Item::Input {
+                    key, secret, fill, ..
+                } => screen.inputs.push(prog::Input {
                     key: key.clone(),
                     secret: *secret,
                     fill: fill.as_deref().map(|f| c.text(f)).unwrap_or_default(),
                 }),
-                Item::Button { label, style, steps, span } => {
+                Item::Button {
+                    label,
+                    style,
+                    steps,
+                    span,
+                } => {
                     let compiled = c.steps(steps, &order, *span)?;
                     programs.push(compiled);
                     screen.buttons.push(prog::Button {
@@ -85,7 +113,10 @@ pub fn compile(doc: &ast::Document) -> Result<Program, CueError> {
         if screen.buttons.is_empty() {
             return Err(CueError::resolve(
                 s.span,
-                format!("screen `{}` has no buttons — the player could never leave it", s.name),
+                format!(
+                    "screen `{}` has no buttons — the player could never leave it",
+                    s.name
+                ),
             ));
         }
         screens.push(screen);
@@ -122,7 +153,10 @@ fn check_reachable(p: &Program, flow: &ast::Flow) -> Result<(), CueError> {
             let span = flow.screens.get(i).map(|s| s.span).unwrap_or(flow.span);
             return Err(CueError::resolve(
                 span,
-                format!("screen `{}` is unreachable from `{}`", p.screens[i].name, p.screens[p.entry as usize].name),
+                format!(
+                    "screen `{}` is unreachable from `{}`",
+                    p.screens[i].name, p.screens[p.entry as usize].name
+                ),
             ));
         }
     }
@@ -157,10 +191,9 @@ impl Compiler {
         for it in items {
             match it {
                 Item::Include { name, span } => {
-                    let f = self
-                        .fragments
-                        .get(name)
-                        .ok_or_else(|| CueError::resolve(*span, format!("no fragment named `{name}`")))?;
+                    let f = self.fragments.get(name).ok_or_else(|| {
+                        CueError::resolve(*span, format!("no fragment named `{name}`"))
+                    })?;
                     // one level: a fragment including a fragment would need cycle
                     // detection, and nothing needs it yet
                     for inner in f {
@@ -213,7 +246,9 @@ impl Compiler {
                 rest = &rest[open + 1..];
                 continue;
             }
-            let Some(close) = rest[open..].find('}') else { break };
+            let Some(close) = rest[open..].find('}') else {
+                break;
+            };
             lit.push_str(&rest[..open]);
             let inner = &rest[open + 1..open + close];
             rest = &rest[open + close + 1..];
@@ -271,37 +306,67 @@ impl Compiler {
         Ok(out)
     }
 
-    fn step(&mut self, s: &Stmt, order: &HashMap<String, ScreenId>) -> Result<prog::Step, CueError> {
+    fn step(
+        &mut self,
+        s: &Stmt,
+        order: &HashMap<String, ScreenId>,
+    ) -> Result<prog::Step, CueError> {
         Ok(match s {
-            Stmt::Let { name, value, .. } => prog::Step::Let { name: name.clone(), value: self.text(value) },
-            Stmt::Remember { name, value, .. } => {
-                prog::Step::Remember { name: name.clone(), value: self.text(value) }
-            }
-            Stmt::Require { cond, message, .. } => {
-                prog::Step::Require { cond: self.cond(cond)?, message: self.text(message) }
-            }
-            Stmt::Lookup { table, field, value, bind, .. } => prog::Step::Lookup {
+            Stmt::Let { name, value, .. } => prog::Step::Let {
+                name: name.clone(),
+                value: self.text(value),
+            },
+            Stmt::Remember { name, value, .. } => prog::Step::Remember {
+                name: name.clone(),
+                value: self.text(value),
+            },
+            Stmt::Require { cond, message, .. } => prog::Step::Require {
+                cond: self.cond(cond)?,
+                message: self.text(message),
+            },
+            Stmt::Lookup {
+                table,
+                field,
+                value,
+                bind,
+                ..
+            } => prog::Step::Lookup {
                 table: table.clone(),
                 field: field.clone(),
                 value: self.text(value),
                 bind: bind.clone(),
             },
-            Stmt::Call { effect, args, handlers, .. } => {
-                let args = args.iter().map(|(k, v)| (k.clone(), self.text(v))).collect();
+            Stmt::Call {
+                effect,
+                args,
+                handlers,
+                ..
+            } => {
+                let args = args
+                    .iter()
+                    .map(|(k, v)| (k.clone(), self.text(v)))
+                    .collect();
                 let mut hs = Vec::with_capacity(handlers.len());
                 for h in handlers {
                     let mut actions = Vec::with_capacity(h.actions.len());
                     for a in &h.actions {
                         actions.push(self.step(a, order)?);
                     }
-                    hs.push(prog::Handler { code: h.code.clone(), actions });
+                    hs.push(prog::Handler {
+                        code: h.code.clone(),
+                        actions,
+                    });
                 }
-                prog::Step::Call { effect: effect.clone(), args, handlers: hs }
+                prog::Step::Call {
+                    effect: effect.clone(),
+                    args,
+                    handlers: hs,
+                }
             }
             Stmt::Open { screen, span } => {
-                let id = order
-                    .get(screen)
-                    .ok_or_else(|| CueError::resolve(*span, format!("`open {screen}` — no such screen")))?;
+                let id = order.get(screen).ok_or_else(|| {
+                    CueError::resolve(*span, format!("`open {screen}` — no such screen"))
+                })?;
                 prog::Step::Open(*id)
             }
             Stmt::Stay { message, .. } => prog::Step::Stay(self.text(message)),
@@ -318,15 +383,22 @@ impl Compiler {
                 value: self.text(value),
                 re: Regex::new(pattern).map_err(|e| CueError::Regex(e.to_string()))?,
             },
-            ast::Cond::IsEmpty { value, negated } => {
-                prog::Cond::IsEmpty { value: self.text(value), negated: *negated }
-            }
-            ast::Cond::Equals { left, right, negated } => prog::Cond::Equals {
+            ast::Cond::IsEmpty { value, negated } => prog::Cond::IsEmpty {
+                value: self.text(value),
+                negated: *negated,
+            },
+            ast::Cond::Equals {
+                left,
+                right,
+                negated,
+            } => prog::Cond::Equals {
                 left: self.text(left),
                 right: self.text(right),
                 negated: *negated,
             },
-            ast::Cond::NoWhitespace { value } => prog::Cond::NoWhitespace { value: self.text(value) },
+            ast::Cond::NoWhitespace { value } => prog::Cond::NoWhitespace {
+                value: self.text(value),
+            },
             ast::Cond::LengthBetween { value, min, max } => prog::Cond::LengthBetween {
                 value: self.text(value),
                 min: min.parse().unwrap_or(0),
@@ -363,13 +435,16 @@ mod tests {
         )
         .unwrap();
         assert_eq!(p.entry, 0);
-        let Some(prog::Step::Open(id)) = p.programs[0].first() else { panic!() };
+        let Some(prog::Step::Open(id)) = p.programs[0].first() else {
+            panic!()
+        };
         assert_eq!(*id, 1);
     }
 
     #[test]
     fn rejects_open_to_a_missing_screen() {
-        let err = compile_src(r#"flow f { entry a screen a { button "go" { open nowhere } } }"#).unwrap_err();
+        let err = compile_src(r#"flow f { entry a screen a { button "go" { open nowhere } } }"#)
+            .unwrap_err();
         assert!(format!("{err}").contains("no such screen"), "{err}");
     }
 
@@ -408,7 +483,11 @@ mod tests {
                 screen a { text "hi {player.name} and {player.name}" button "b" { stay "x" } } }"#,
         )
         .unwrap();
-        assert_eq!(p.slots, vec!["player.name".to_string()], "same path shares one slot");
+        assert_eq!(
+            p.slots,
+            vec!["player.name".to_string()],
+            "same path shares one slot"
+        );
     }
 
     #[test]
@@ -424,10 +503,9 @@ mod tests {
 
     #[test]
     fn merges_adjacent_literals() {
-        let p = compile_src(
-            r#"flow f { entry a screen a { text "abc" button "b" { stay "x" } } }"#,
-        )
-        .unwrap();
+        let p =
+            compile_src(r#"flow f { entry a screen a { text "abc" button "b" { stay "x" } } }"#)
+                .unwrap();
         assert_eq!(p.screens[0].lines[0].text.ops.len(), 1);
     }
 }

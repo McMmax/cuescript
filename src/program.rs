@@ -83,20 +83,54 @@ pub struct Screen {
 /// a compiled condition — total and side-effect free by construction
 #[derive(Debug, Clone)]
 pub enum Cond {
-    Matches { value: Text, re: Regex },
-    IsEmpty { value: Text, negated: bool },
-    Equals { left: Text, right: Text, negated: bool },
-    NoWhitespace { value: Text },
-    LengthBetween { value: Text, min: usize, max: usize },
+    Matches {
+        value: Text,
+        re: Regex,
+    },
+    IsEmpty {
+        value: Text,
+        negated: bool,
+    },
+    Equals {
+        left: Text,
+        right: Text,
+        negated: bool,
+    },
+    NoWhitespace {
+        value: Text,
+    },
+    LengthBetween {
+        value: Text,
+        min: usize,
+        max: usize,
+    },
 }
 
 #[derive(Debug, Clone)]
 pub enum Step {
-    Let { name: String, value: Text },
-    Remember { name: String, value: Text },
-    Require { cond: Cond, message: Text },
-    Lookup { table: String, field: String, value: Text, bind: String },
-    Call { effect: String, args: Vec<(String, Text)>, handlers: Vec<Handler> },
+    Let {
+        name: String,
+        value: Text,
+    },
+    Remember {
+        name: String,
+        value: Text,
+    },
+    Require {
+        cond: Cond,
+        message: Text,
+    },
+    Lookup {
+        table: String,
+        field: String,
+        value: Text,
+        bind: String,
+    },
+    Call {
+        effect: String,
+        args: Vec<(String, Text)>,
+        handlers: Vec<Handler>,
+    },
     Open(ScreenId),
     Stay(Text),
     Say(Text),
@@ -130,7 +164,10 @@ impl Program {
     }
 
     pub fn screen_by_name(&self, name: &str) -> Option<ScreenId> {
-        self.screens.iter().position(|s| s.name == name).map(|i| i as ScreenId)
+        self.screens
+            .iter()
+            .position(|s| s.name == name)
+            .map(|i| i as ScreenId)
     }
 
     /// every placeholder path this program can read. a host fills exactly these

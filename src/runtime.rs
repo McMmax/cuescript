@@ -52,17 +52,28 @@ pub enum CallResult {
 /// tick thread can stall.
 pub trait Host: Send {
     fn lookup(&self, table: &str, field: &str, value: &str) -> Row;
-    fn call<'a>(&'a mut self, effect: &'a str, args: &'a [(String, String)]) -> BoxFuture<'a, CallResult>;
+    fn call<'a>(
+        &'a mut self,
+        effect: &'a str,
+        args: &'a [(String, String)],
+    ) -> BoxFuture<'a, CallResult>;
 }
 
 /// what the runtime wants done after a button ran
 #[derive(Debug, Clone, PartialEq)]
 pub enum Outcome {
     /// re-show the current screen, optionally with an error line
-    Stay { message: Option<String> },
+    Stay {
+        message: Option<String>,
+    },
     /// show another screen, optionally with a message on it
-    Open { screen: ScreenId, message: Option<String> },
-    Kick { message: String },
+    Open {
+        screen: ScreenId,
+        message: Option<String>,
+    },
+    Kick {
+        message: String,
+    },
     /// let the player out — internode's limbo release
     Release,
 }
@@ -139,7 +150,12 @@ pub fn render(p: &Program, screen: ScreenId, slots: &dyn Slots) -> ScreenView {
             title = text;
             continue;
         }
-        lines.push(LineView { kind: l.kind, text, color: l.color.clone(), bold: l.bold });
+        lines.push(LineView {
+            kind: l.kind,
+            text,
+            color: l.color.clone(),
+            bold: l.bold,
+        });
     }
 
     ScreenView {
@@ -158,7 +174,11 @@ pub fn render(p: &Program, screen: ScreenId, slots: &dyn Slots) -> ScreenView {
             .buttons
             .iter()
             .enumerate()
-            .map(|(n, b)| ButtonView { label: eval(p, &b.label, slots), style: b.style, index: n as u16 })
+            .map(|(n, b)| ButtonView {
+                label: eval(p, &b.label, slots),
+                style: b.style,
+                index: n as u16,
+            })
             .collect(),
     }
 }
@@ -228,91 +248,124 @@ fn exec<'a>(
     host: &'a mut dyn Host,
 ) -> BoxFuture<'a, Outcome> {
     Box::pin(async move {
-    for step in steps {
-        match step {
-            Step::Let { name, value } => {
-                let v = eval(p, value, &layered(scope, slots));
-                scope.vars.insert(name.clone(), v);
-            }
-            Step::Remember { name, value } => {
-                let v = eval(p, value, &layered(scope, slots));
-                scope.vars.insert(name.clone(), v.clone());
-                scope.set_state(name, &v);
-            }
-            Step::Require { cond, message } => {
-                if !test(p, cond, scope, slots) {
-                    return Outcome::Stay { message: Some(eval(p, message, &layered(scope, slots))) };
+        for step in steps {
+            match step {
+                Step::Let { name, value } => {
+                    let v = eval(p, value, &layered(scope, slots));
+                    scope.vars.insert(name.clone(), v);
                 }
-            }
-            Step::Lookup { table, field, value, bind } => {
-                let v = eval(p, value, &layered(scope, slots));
-                match host.lookup(table, field, &v) {
-                    Some(row) => {
-                        // a hit binds `<name>` truthy plus every column
-                        scope.vars.insert(bind.clone(), "1".into());
-                        for (col, val) in row {
-                            scope.vars.insert(format!("{bind}.{col}"), val);
+                Step::Remember { name, value } => {
+                    let v = eval(p, value, &layered(scope, slots));
+                    scope.vars.insert(name.clone(), v.clone());
+                    scope.set_state(name, &v);
+                }
+                Step::Require { cond, message } => {
+                    if !test(p, cond, scope, slots) {
+                        return Outcome::Stay {
+                            message: Some(eval(p, message, &layered(scope, slots))),
+                        };
+                    }
+                }
+                Step::Lookup {
+                    table,
+                    field,
+                    value,
+                    bind,
+                } => {
+                    let v = eval(p, value, &layered(scope, slots));
+                    match host.lookup(table, field, &v) {
+                        Some(row) => {
+                            // a hit binds `<name>` truthy plus every column
+                            scope.vars.insert(bind.clone(), "1".into());
+                            for (col, val) in row {
+                                scope.vars.insert(format!("{bind}.{col}"), val);
+                            }
+                        }
+                        None => {
+                            scope.vars.insert(bind.clone(), String::new());
                         }
                     }
-                    None => {
-                        scope.vars.insert(bind.clone(), String::new());
+                }
+                Step::Call {
+                    effect,
+                    args,
+                    handlers,
+                } => {
+                    let resolved: Vec<(String, String)> = args
+                        .iter()
+                        .map(|(k, t)| (k.clone(), eval(p, t, &layered(scope, slots))))
+                        .collect();
+                    let code = match host.call(effect, &resolved).await {
+                        CallResult::Ok => None,
+                        CallResult::Err(c) => Some(c),
+                        CallResult::Timeout => Some("timeout".to_string()),
+                    };
+                    if let Some(code) = code {
+                        let arm = handlers
+                            .iter()
+                            .find(|h| h.code == code)
+                            .or_else(|| handlers.iter().find(|h| h.code == "*"));
+                        return match arm {
+                            Some(h) => exec(p, &h.actions, scope, slots, host).await,
+                            // an unhandled failure must never fall through into the
+                            // success path — that would advance as if it worked
+                            None => Outcome::Stay {
+                                message: Some(code),
+                            },
+                        };
                     }
                 }
-            }
-            Step::Call { effect, args, handlers } => {
-                let resolved: Vec<(String, String)> = args
-                    .iter()
-                    .map(|(k, t)| (k.clone(), eval(p, t, &layered(scope, slots))))
-                    .collect();
-                let code = match host.call(effect, &resolved).await {
-                    CallResult::Ok => None,
-                    CallResult::Err(c) => Some(c),
-                    CallResult::Timeout => Some("timeout".to_string()),
-                };
-                if let Some(code) = code {
-                    let arm = handlers
-                        .iter()
-                        .find(|h| h.code == code)
-                        .or_else(|| handlers.iter().find(|h| h.code == "*"));
-                    return match arm {
-                        Some(h) => exec(p, &h.actions, scope, slots, host).await,
-                        // an unhandled failure must never fall through into the
-                        // success path — that would advance as if it worked
-                        None => Outcome::Stay { message: Some(code) },
-                    };
+                // a `say` before a navigation is the message shown on arrival
+                Step::Open(id) => {
+                    return Outcome::Open {
+                        screen: *id,
+                        message: scope.vars.remove("__say"),
+                    }
                 }
+                Step::Stay(m) => {
+                    return Outcome::Stay {
+                        message: Some(eval(p, m, &layered(scope, slots))),
+                    }
+                }
+                Step::Say(m) => {
+                    // `say` does not decide the outcome; it annotates whichever
+                    // navigation follows, so it is stashed rather than emitted.
+                    // it must therefore come BEFORE the `open` it belongs to
+                    let v = eval(p, m, &layered(scope, slots));
+                    scope.vars.insert("__say".into(), v);
+                }
+                Step::Kick(m) => {
+                    return Outcome::Kick {
+                        message: eval(p, m, &layered(scope, slots)),
+                    }
+                }
+                Step::Release => return Outcome::Release,
             }
-            // a `say` before a navigation is the message shown on arrival
-            Step::Open(id) => {
-                return Outcome::Open { screen: *id, message: scope.vars.remove("__say") }
-            }
-            Step::Stay(m) => return Outcome::Stay { message: Some(eval(p, m, &layered(scope, slots))) },
-            Step::Say(m) => {
-                // `say` does not decide the outcome; it annotates whichever
-                // navigation follows, so it is stashed rather than emitted.
-                // it must therefore come BEFORE the `open` it belongs to
-                let v = eval(p, m, &layered(scope, slots));
-                scope.vars.insert("__say".into(), v);
-            }
-            Step::Kick(m) => return Outcome::Kick { message: eval(p, m, &layered(scope, slots)) },
-            Step::Release => return Outcome::Release,
         }
-    }
 
         // ran off the end without deciding: stay put, carrying any `say`
-        Outcome::Stay { message: scope.vars.remove("__say") }
+        Outcome::Stay {
+            message: scope.vars.remove("__say"),
+        }
     })
 }
 
 fn test(p: &Program, c: &Cond, scope: &Scope, slots: &dyn Slots) -> bool {
-    let ctx = Layered { scope, outer: slots };
+    let ctx = Layered {
+        scope,
+        outer: slots,
+    };
     match c {
         Cond::Matches { value, re } => re.is_match(&eval(p, value, &ctx)),
         Cond::IsEmpty { value, negated } => {
             let empty = eval(p, value, &ctx).is_empty();
             empty != *negated
         }
-        Cond::Equals { left, right, negated } => {
+        Cond::Equals {
+            left,
+            right,
+            negated,
+        } => {
             let eq = eval(p, left, &ctx) == eval(p, right, &ctx);
             eq != *negated
         }

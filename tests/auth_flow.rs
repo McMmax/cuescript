@@ -12,7 +12,12 @@ use cuescript::{build, runtime};
 fn block_on<T>(fut: impl std::future::Future<Output = T>) -> T {
     use std::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
     fn vtable() -> &'static RawWakerVTable {
-        &RawWakerVTable::new(|_| RawWaker::new(std::ptr::null(), vtable()), |_| {}, |_| {}, |_| {})
+        &RawWakerVTable::new(
+            |_| RawWaker::new(std::ptr::null(), vtable()),
+            |_| {},
+            |_| {},
+            |_| {},
+        )
     }
     let waker = unsafe { Waker::from_raw(RawWaker::new(std::ptr::null(), vtable())) };
     let mut cx = Context::from_waker(&waker);
@@ -205,7 +210,9 @@ fn the_header_fragment_lands_on_every_screen() {
     for id in 0..p.screens.len() as u16 {
         let view = runtime::render(&p, id, &ctx);
         assert!(
-            view.lines.iter().any(|l| l.text.contains("Offline Identity: blockinn")),
+            view.lines
+                .iter()
+                .any(|l| l.text.contains("Offline Identity: blockinn")),
             "screen `{}` is missing the header",
             p.screens[id as usize].name
         );
@@ -223,24 +230,55 @@ fn placeholders_resolve_from_the_host() {
 #[test]
 fn a_free_username_advances_to_the_password_step() {
     let p = build(AUTH).unwrap();
-    let mut host = Fake { taken: "taken_name", call_result: None, calls: vec![] };
+    let mut host = Fake {
+        taken: "taken_name",
+        call_result: None,
+        calls: vec![],
+    };
     let mut scope = Scope::default();
     let screen = p.screen_by_name("register_username").unwrap();
 
-    let out = press(&p, screen, 0, &[("username", "freshname")], &mut host, &mut scope);
-    assert_eq!(out, Outcome::Open { screen: p.screen_by_name("register_password").unwrap(), message: None });
-    assert_eq!(scope.vars.get("state.chosen_username").map(String::as_str), Some("freshname"));
+    let out = press(
+        &p,
+        screen,
+        0,
+        &[("username", "freshname")],
+        &mut host,
+        &mut scope,
+    );
+    assert_eq!(
+        out,
+        Outcome::Open {
+            screen: p.screen_by_name("register_password").unwrap(),
+            message: None
+        }
+    );
+    assert_eq!(
+        scope.vars.get("state.chosen_username").map(String::as_str),
+        Some("freshname")
+    );
 }
 
 /// the guard is the point: a taken name must not reach the next page
 #[test]
 fn a_taken_username_stays_put_with_a_reason() {
     let p = build(AUTH).unwrap();
-    let mut host = Fake { taken: "blockinn", call_result: None, calls: vec![] };
+    let mut host = Fake {
+        taken: "blockinn",
+        call_result: None,
+        calls: vec![],
+    };
     let mut scope = Scope::default();
     let screen = p.screen_by_name("register_username").unwrap();
 
-    let out = press(&p, screen, 0, &[("username", "blockinn")], &mut host, &mut scope);
+    let out = press(
+        &p,
+        screen,
+        0,
+        &[("username", "blockinn")],
+        &mut host,
+        &mut scope,
+    );
     match out {
         Outcome::Stay { message: Some(m) } => assert!(m.contains("already taken"), "{m}"),
         other => panic!("expected to stay on the screen, got {other:?}"),
@@ -250,22 +288,44 @@ fn a_taken_username_stays_put_with_a_reason() {
 #[test]
 fn an_invalid_username_never_reaches_the_database() {
     let p = build(AUTH).unwrap();
-    let mut host = Fake { taken: "x", call_result: None, calls: vec![] };
+    let mut host = Fake {
+        taken: "x",
+        call_result: None,
+        calls: vec![],
+    };
     let mut scope = Scope::default();
     let screen = p.screen_by_name("register_username").unwrap();
 
-    let out = press(&p, screen, 0, &[("username", "no spaces allowed")], &mut host, &mut scope);
+    let out = press(
+        &p,
+        screen,
+        0,
+        &[("username", "no spaces allowed")],
+        &mut host,
+        &mut scope,
+    );
     assert!(matches!(out, Outcome::Stay { message: Some(_) }));
 }
 
 #[test]
 fn a_password_with_spaces_is_rejected() {
     let p = build(AUTH).unwrap();
-    let mut host = Fake { taken: "x", call_result: None, calls: vec![] };
+    let mut host = Fake {
+        taken: "x",
+        call_result: None,
+        calls: vec![],
+    };
     let mut scope = Scope::default();
     let screen = p.screen_by_name("register_password").unwrap();
 
-    let out = press(&p, screen, 0, &[("password", "has a space")], &mut host, &mut scope);
+    let out = press(
+        &p,
+        screen,
+        0,
+        &[("password", "has a space")],
+        &mut host,
+        &mut scope,
+    );
     match out {
         Outcome::Stay { message: Some(m) } => assert!(m.contains("spaces"), "{m}"),
         other => panic!("expected rejection, got {other:?}"),
@@ -275,28 +335,59 @@ fn a_password_with_spaces_is_rejected() {
 #[test]
 fn mismatched_confirmation_does_not_call_the_reducer() {
     let p = build(AUTH).unwrap();
-    let mut host = Fake { taken: "x", call_result: None, calls: vec![] };
+    let mut host = Fake {
+        taken: "x",
+        call_result: None,
+        calls: vec![],
+    };
     let mut scope = Scope::default();
     scope.set_state("password", "correct1");
     scope.set_state("chosen_username", "freshname");
     let screen = p.screen_by_name("register_confirm").unwrap();
 
-    let out = press(&p, screen, 0, &[("confirm", "different")], &mut host, &mut scope);
+    let out = press(
+        &p,
+        screen,
+        0,
+        &[("confirm", "different")],
+        &mut host,
+        &mut scope,
+    );
     assert!(matches!(out, Outcome::Stay { message: Some(_) }));
-    assert!(host.calls.is_empty(), "a failed guard must short-circuit before the effect");
+    assert!(
+        host.calls.is_empty(),
+        "a failed guard must short-circuit before the effect"
+    );
 }
 
 #[test]
 fn a_successful_registration_opens_the_receipt() {
     let p = build(AUTH).unwrap();
-    let mut host = Fake { taken: "x", call_result: None, calls: vec![] };
+    let mut host = Fake {
+        taken: "x",
+        call_result: None,
+        calls: vec![],
+    };
     let mut scope = Scope::default();
     scope.set_state("password", "correct1");
     scope.set_state("chosen_username", "freshname");
     let screen = p.screen_by_name("register_confirm").unwrap();
 
-    let out = press(&p, screen, 0, &[("confirm", "correct1")], &mut host, &mut scope);
-    assert_eq!(out, Outcome::Open { screen: p.screen_by_name("success").unwrap(), message: None });
+    let out = press(
+        &p,
+        screen,
+        0,
+        &[("confirm", "correct1")],
+        &mut host,
+        &mut scope,
+    );
+    assert_eq!(
+        out,
+        Outcome::Open {
+            screen: p.screen_by_name("success").unwrap(),
+            message: None
+        }
+    );
     assert_eq!(host.calls, vec!["player_register(2)"]);
 }
 
@@ -304,13 +395,24 @@ fn a_successful_registration_opens_the_receipt() {
 #[test]
 fn a_username_taken_during_creation_routes_back_to_step_one() {
     let p = build(AUTH).unwrap();
-    let mut host = Fake { taken: "x", call_result: Some("username_taken"), calls: vec![] };
+    let mut host = Fake {
+        taken: "x",
+        call_result: Some("username_taken"),
+        calls: vec![],
+    };
     let mut scope = Scope::default();
     scope.set_state("password", "correct1");
     scope.set_state("chosen_username", "freshname");
     let screen = p.screen_by_name("register_confirm").unwrap();
 
-    let out = press(&p, screen, 0, &[("confirm", "correct1")], &mut host, &mut scope);
+    let out = press(
+        &p,
+        screen,
+        0,
+        &[("confirm", "correct1")],
+        &mut host,
+        &mut scope,
+    );
     assert_eq!(
         out,
         Outcome::Open {
@@ -324,13 +426,24 @@ fn a_username_taken_during_creation_routes_back_to_step_one() {
 #[test]
 fn a_reducer_timeout_is_handled_not_swallowed() {
     let p = build(AUTH).unwrap();
-    let mut host = Fake { taken: "x", call_result: Some("timeout"), calls: vec![] };
+    let mut host = Fake {
+        taken: "x",
+        call_result: Some("timeout"),
+        calls: vec![],
+    };
     let mut scope = Scope::default();
     scope.set_state("password", "correct1");
     scope.set_state("chosen_username", "freshname");
     let screen = p.screen_by_name("register_confirm").unwrap();
 
-    let out = press(&p, screen, 0, &[("confirm", "correct1")], &mut host, &mut scope);
+    let out = press(
+        &p,
+        screen,
+        0,
+        &[("confirm", "correct1")],
+        &mut host,
+        &mut scope,
+    );
     match out {
         Outcome::Stay { message: Some(m) } => assert!(m.contains("timed out"), "{m}"),
         other => panic!("a timeout must not advance the flow, got {other:?}"),
@@ -341,47 +454,94 @@ fn a_reducer_timeout_is_handled_not_swallowed() {
 #[test]
 fn an_unhandled_error_does_not_advance() {
     let p = build(AUTH).unwrap();
-    let mut host = Fake { taken: "x", call_result: Some("account_missing"), calls: vec![] };
+    let mut host = Fake {
+        taken: "x",
+        call_result: Some("account_missing"),
+        calls: vec![],
+    };
     let mut scope = Scope::default();
     scope.set_state("password", "correct1");
     scope.set_state("chosen_username", "freshname");
     let screen = p.screen_by_name("register_confirm").unwrap();
 
-    let out = press(&p, screen, 0, &[("confirm", "correct1")], &mut host, &mut scope);
+    let out = press(
+        &p,
+        screen,
+        0,
+        &[("confirm", "correct1")],
+        &mut host,
+        &mut scope,
+    );
     assert!(matches!(out, Outcome::Stay { .. }), "got {out:?}");
 }
 
 #[test]
 fn login_releases_the_player() {
     let p = build(AUTH).unwrap();
-    let mut host = Fake { taken: "x", call_result: None, calls: vec![] };
+    let mut host = Fake {
+        taken: "x",
+        call_result: None,
+        calls: vec![],
+    };
     let mut scope = Scope::default();
     let screen = p.screen_by_name("login").unwrap();
 
-    let out = press(&p, screen, 0, &[("password", "hunter22")], &mut host, &mut scope);
+    let out = press(
+        &p,
+        screen,
+        0,
+        &[("password", "hunter22")],
+        &mut host,
+        &mut scope,
+    );
     assert_eq!(out, Outcome::Release);
 }
 
 #[test]
 fn a_bad_password_stays_on_the_login_screen() {
     let p = build(AUTH).unwrap();
-    let mut host = Fake { taken: "x", call_result: Some("bad_password"), calls: vec![] };
+    let mut host = Fake {
+        taken: "x",
+        call_result: Some("bad_password"),
+        calls: vec![],
+    };
     let mut scope = Scope::default();
     let screen = p.screen_by_name("login").unwrap();
 
-    let out = press(&p, screen, 0, &[("password", "wrong")], &mut host, &mut scope);
-    assert_eq!(out, Outcome::Stay { message: Some("Incorrect password.".into()) });
+    let out = press(
+        &p,
+        screen,
+        0,
+        &[("password", "wrong")],
+        &mut host,
+        &mut scope,
+    );
+    assert_eq!(
+        out,
+        Outcome::Stay {
+            message: Some("Incorrect password.".into())
+        }
+    );
 }
 
 #[test]
 fn disconnect_kicks_with_the_authored_reason() {
     let p = build(AUTH).unwrap();
-    let mut host = Fake { taken: "x", call_result: None, calls: vec![] };
+    let mut host = Fake {
+        taken: "x",
+        call_result: None,
+        calls: vec![],
+    };
     let mut scope = Scope::default();
     let welcome = p.entry;
 
     let out = press(&p, welcome, 2, &[], &mut host, &mut scope);
-    assert_eq!(out, Outcome::Kick { message: "Disconnected.".into() });
+    assert_eq!(
+        out,
+        Outcome::Kick {
+            message: "Disconnected.".into()
+        }
+    );
 }
 
 #[test]
@@ -392,7 +552,10 @@ fn secret_inputs_are_marked_so_a_host_can_mask_them() {
     assert!(pw.secret);
     let user = view.inputs.iter().find(|i| i.key == "username").unwrap();
     assert!(!user.secret);
-    assert_eq!(user.initial, "blockinn", "fill= should prefill from the host");
+    assert_eq!(
+        user.initial, "blockinn",
+        "fill= should prefill from the host"
+    );
 }
 
 /// every path a player can take must terminate at a screen that exists
@@ -402,7 +565,10 @@ fn every_open_target_exists() {
     for prog in &p.programs {
         for step in prog {
             if let cuescript::program::Step::Open(id) = step {
-                assert!((*id as usize) < p.screens.len(), "dangling open target {id}");
+                assert!(
+                    (*id as usize) < p.screens.len(),
+                    "dangling open target {id}"
+                );
             }
         }
     }

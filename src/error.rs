@@ -24,10 +24,16 @@ pub enum CueError {
 
 impl CueError {
     pub fn syntax(span: Span, msg: impl Into<String>) -> Self {
-        Self::Syntax { span, msg: msg.into() }
+        Self::Syntax {
+            span,
+            msg: msg.into(),
+        }
     }
 
     pub fn resolve(span: Span, msg: impl Into<String>) -> Self {
-        Self::Resolve { span, msg: msg.into() }
+        Self::Resolve {
+            span,
+            msg: msg.into(),
+        }
     }
 }
